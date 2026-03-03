@@ -8,6 +8,18 @@
   Chudbot is a stupid-simple “chat in a file” bot.
 </p>
 
+<p align="center">
+  <a href="https://github.com/basedwon/chudbot/actions/workflows/ci.yml">
+    <img alt="ci" src="https://github.com/basedwon/chudbot/actions/workflows/ci.yml/badge.svg" />
+  </a>
+  <a href="https://www.npmjs.com/package/chudbot">
+    <img alt="npm" src="https://img.shields.io/npm/v/chudbot" />
+  </a>
+  <a href="https://www.npmjs.com/package/chudbot">
+    <img alt="downloads" src="https://img.shields.io/npm/dw/chudbot" />
+  </a>
+</p>
+
 You write messages in a `chat.md` file, save it, and Chudbot appends the assistant reply right into the same file.
 
 ## What you need
@@ -51,7 +63,17 @@ Confirm it works:
 
 ```bash
 chudbot --help
+# alias also works
+chud --help
 ```
+
+### Optional: check for updates
+
+```bash
+chud update
+```
+
+If an update is available, Chudbot prints the exact install command. To install automatically, use `-y/--yes` or set `CHUDBOT_AUTO_UPDATE=1`.
 
 ## Step 3: Create an OpenRouter account and API key
 
@@ -126,9 +148,17 @@ Open that file and set:
 ```bash
 OPENROUTER_API_KEY=YOUR_KEY_HERE
 OPENROUTER_MODEL=openrouter/free
+OPENROUTER_DEFAULT_MODEL=openrouter/free
 ```
 
-`openrouter/free` routes to a currently-free option on OpenRouter. If it ever errors later, pick a different model.
+`OPENROUTER_MODEL` is the primary env var for model selection.
+If set, it takes precedence.
+
+`OPENROUTER_DEFAULT_MODEL` is also supported as a fallback when
+`OPENROUTER_MODEL` is not set.
+
+`openrouter/free` routes to a currently-free option on OpenRouter.
+If it ever errors later, pick a different model.
 
 ## Step 7: Use it
 
@@ -141,6 +171,56 @@ chudbot run
 It only runs if the chat ends with a non-empty `# %% user` message.
 
 On success it appends `# %% assistant` with the reply, then appends a fresh `# %% user` header so you can type the next message.
+
+
+### Optional file context injection
+
+You can inject one or more local files into model context without copy/paste:
+
+```bash
+chudbot run -f src/a.js -f notes/todo.md
+chudbot run -files src/a.js,notes/todo.md
+chudbot run -f src/a.js -files notes/todo.md,README.md
+```
+
+Paths are resolved relative to your current working directory. Files are
+prepended in deterministic order: repeated `-f/--file` entries first (in the
+order provided), then `-files` entries left-to-right.
+
+You can also set files in `chat.md` front matter:
+
+```markdown
+---
+files:
+  - src/a.js
+  - notes/todo.md
+---
+```
+
+These entries are appended after CLI `-f/--file` and `-files` values.
+
+### Optional trim limits from CLI
+
+You can cap how much chat history is sent to the model:
+
+```bash
+chudbot run --max-messages 24
+chudbot run --max-tokens 4000
+chudbot run --max-messages 24 --max-tokens 4000
+```
+
+You can also pass the same limits in watch mode:
+
+```bash
+chudbot watch --max-messages 24 --max-tokens 4000
+```
+
+And you can set global defaults once per invocation:
+
+```bash
+chudbot --max-messages 24 --max-tokens 4000 run
+chudbot --max-messages 24 --max-tokens 4000 watch
+```
 
 ## Watch mode (auto-reply on save)
 
@@ -193,11 +273,24 @@ memory.override: true
 ---
 ```
 
+You can also trim long chats before model calls:
+
+```markdown
+---
+max_messages: 24
+max_tokens: 4000
+---
+```
+
+Trimming is deterministic: system messages are kept, the first user message is
+kept as seed continuity, and then the newest remaining messages are kept within
+the message/token limits.
+
 ## Where files are loaded from
 
 Chat:
 
-- Uses `chat.md` in your current folder by default (or `f/--chat`)
+- Uses `chat.md` in your current folder by default (or `--chat`)
 
 Env:
 
@@ -220,6 +313,8 @@ Memory:
 - “401 / unauthorized”
     - Your API key is missing or wrong
 - “Model not found”
-    - Try a different `OPENROUTER_MODEL` or set `model:` in chat front matter
+    - Try a different `OPENROUTER_MODEL`
+    - Or set `OPENROUTER_DEFAULT_MODEL` if you want a fallback env key
+    - Or set `model:` in chat front matter
 - “It replied twice / weird loop”
     - Only edit the last `# %% user` block, and let the bot append assistant blocks
